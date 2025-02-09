@@ -1,0 +1,323 @@
+// ███████████████████████████████████████████████████████████████████████████████████████████████████████████████████
+//                         ProfitWave™ Crystal Ball Omni-Trending Strategy 2025 © Tim Rice
+// ███████████████████████████████████████████████████████████████████████████████████████████████████████████████████
+//                                    Big Wave Wealth Vision™ Version 1.0.1 ALPHA lock 2
+//                                                     💰💰💰
+//                   Use this indicator to plot trend changes from earlier timeframe. Time travel baby!!
+//                                                     🔮🔮🔮
+//
+//                                  ╔══════════════════════════════════════════════╗
+//                                  ║              COPYRIGHT © 2025                ║
+//                                  ╚══════════════════════════════════════════════╝
+//
+//                                ████████╗██╗███╗░░░███╗  ██████╗░██╗░█████╗░███████╗™
+//                                ╚══██╔══╝██║████╗░████║  ██╔══██╗██║██╔══██╗██╔════╝
+//                                ░░░██║░░░██║██╔████╔██║  ██████╔╝██║██║░░╚═╝█████╗░░
+//                                ░░░██║░░░██║██║╚██╔╝██║  ██╔══██╗██║██║░░██╗██╔══╝░░
+//                                ░░░██║░░░██║██║░╚═╝░██║  ██║░░██║██║╚█████╔╝███████╗
+//                                ░░░╚═╝░░░╚═╝╚═╝░░░░░╚═╝  ╚═╝░░╚═╝╚═╝░╚════╝░╚══════╝
+//
+//
+// ███████████████████████████████████████████████████████████████████████████████████████████████████████████████████
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Copyright 2025 © Tim Rice
+
+// This indicator plots SMA crossovers from multiple timeframes.
+// Use the "Time Travel" option to anticipate crossovers one candle in advance.
+// Note: "Time Travel" is experimental and may not be accurate due to repainting.
+// Backtest with caution and consider out-of-sample testing or manual verification.
+// Adjust input parameters to fine-tune the indicator for your trading style.
+
+//@version=5
+strategy("ProfitWave™ Crystal Ball X1", shorttitle="ProfitWave™ Strategy X1", overlay=true, pyramiding=0, default_qty_type=strategy.percent_of_equity, default_qty_value=100, initial_capital=1000, currency=currency.NONE, commission_type=strategy.commission.percent, commission_value=0.12, slippage=2, margin_long=100, margin_short=100, calc_on_order_fills=true, calc_on_every_tick=true, process_orders_on_close=true, backtest_fill_limits_assumption = 0)
+
+// === 📅 DATE RANGE WIZARDRY™ ===
+fromTime = input.time(timestamp("1 Jan 2025 00:00 +0000"), title="From Date 🚀", group="📅 Date Range Wizardry™", tooltip="Select the starting date for backtesting.")
+toTime   = input.time(timestamp("1 Jan 2027 00:00 +0000"), title="To Date 🚀",   group="📅 Date Range Wizardry™", tooltip="Select the ending date for backtesting.")
+
+// === ⚙️ MASTER CONTROL PANEL™ ===
+useRes = input.bool(true, title="Engage Hyper-Resolution Mode? 🚀", group="⚙️ Master Control Panel™", tooltip="Use a higher timeframe for trend analysis.")
+
+// --- Timeframe Slider (replaces dropdown) ---
+higherTimeframeMinutes = input.int(240, title="Time Warp Target (Minutes) ⏳", minval=1, maxval=1440, step=1, group="⚙️ Master Control Panel™", tooltip="Select the higher timeframe in minutes for trend analysis.")
+
+// --- Lookahead Control ---
+useLookahead = input.bool(true, title="Enable Lookahead (for Backtesting)", group="⚙️ Master Control Panel™", tooltip="Use barmerge.lookahead_on for backtesting (repaints) or barmerge.lookahead_off for live trading (no repaint).")
+
+basisType   = input.string("SMMA", title="🔮 Select Your Moving Average Magic:", options=["SMA", "EMA", "DEMA", "TEMA", "WMA", "VWMA", "SMMA", "HullMA", "LSMA", "ALMA", "SSMA", "TMA"], group="⚙️ Master Control Panel™", tooltip="Choose the type of moving average.")
+basisLen    = input.int(8, title="🧙 MA Period Length", minval=1, group="⚙️ Master Control Panel™", tooltip="Set the length of the moving average.")
+offsetSigma = input.int(6, title="✨ LSMA/ALMA Offset/Sigma", minval=0, group="⚙️ Master Control Panel™", tooltip="Offset for LSMA or Sigma for ALMA.")
+offsetALMA  = input.float(0.85, title="🌌 ALMA Offset", minval=0, step=0.01, group="⚙️ Master Control Panel™", tooltip="Offset for ALMA.")
+scolor      = input.bool(false, title="🎨 Activate Technicolor Trend Bars?", group="⚙️ Master Control Panel™", tooltip="Show colored bars based on trend direction.")
+delayOffset = input.int(0, title="⏪ Time Shift (Anti-Repainting)", minval=0, step=1, group="⚙️ Master Control Panel™", tooltip="Delay the moving averages to avoid repainting.")
+tradeType   = input.string("BOTH", title="🎯 Trading Mode:", options=["LONG", "SHORT", "BOTH", "NONE"], group="⚙️ Master Control Panel™", tooltip="Select which types of trades to take.")
+
+
+// === 📚 SECRET TRADING SCROLLS™ ===
+showInstructions = input.bool(false, title="📖 Reveal the Secret Trading Scrolls™", group="📚 Secret Trading Scrolls™", tooltip="Display instructions on the chart.")
+showPerformance = input.bool(false, title="📊 Show Performance Dashboard", group="📚 Secret Trading Scrolls™", tooltip="Display backtesting results on the chart.")
+
+// === 🌈 RADIAL GRADIENT BACKGROUND ===
+bg_group = "🌈 Background Settings"
+color1 = input.color(color.new(#000000, 0), "Center Color", group=bg_group)  //Default to more transparent
+color2 = input.color(color.new(#000000, 0), "Middle Color", group=bg_group) //Default to more transparent
+color3 = input.color(color.rgb(0, 0, 0, 26), "Outer Color", group=bg_group)   //Default to more transparent
+radius = input.float(0.75, "Gradient Radius", minval=0.1, maxval=1.5, step=0.05, group=bg_group)
+x_center = input.int(50, "X Center (%)", minval=0, maxval=100, group=bg_group)
+y_center = input.int(50, "Y Center (%)", minval=0, maxval=100, group=bg_group)
+
+
+// Function for radial gradient (Corrected Normalization and Transparency)
+radialGradient(c1, c2, c3, rad, x_cent, y_cent) =>
+    // Use a fixed-size window for consistent normalization
+    windowSize = 200
+    x = (bar_index - (x_cent / 100 * (bar_index < windowSize ? bar_index : windowSize))) / (bar_index < windowSize ? bar_index : windowSize)
+    y = (close - (y_cent / 100 * (ta.highest(high, windowSize) - ta.lowest(low, windowSize))) - ta.lowest(low, windowSize)) / (ta.highest(high, windowSize) - ta.lowest(low, windowSize))
+    dist = math.sqrt(math.pow(x, 2) + math.pow(y, 2)) / rad
+    // Use color.new with transparency for blending
+    col = color.new(color.rgb(
+         math.round(math.min(math.max(color.r(c1) + (color.r(c2) - color.r(c1)) * dist, 0), 255)),
+         math.round(math.min(math.max(color.g(c1) + (color.g(c2) - color.g(c1)) * dist, 0), 255)),
+         math.round(math.min(math.max(color.b(c1) + (color.b(c2) - color.b(c1)) * dist, 0), 255))
+         ), math.round(math.min(math.max(90 - (dist * 90), 0), 90))) // Transparency
+    col := dist < 1 ? col : color.new(c3, 90)  // Apply outer color with transparency
+    col
+
+// Apply background
+bgcolor(radialGradient(color1, color2, color3, radius, x_center, y_center))
+
+// === BASE FUNCTIONS ===
+variant(type, src, len, offSig, offALMA) =>
+    float ma = na
+    if type == "EMA"
+        ma := ta.ema(src, len)
+    else if type == "DEMA"
+        ma := ta.ema(ta.ema(src, len), len) * 2 - ta.ema(ta.ema(ta.ema(src, len), len), len)
+    else if type == "TEMA"
+        ma := 3 * (ta.ema(src, len) - ta.ema(ta.ema(src, len), len)) + ta.ema(ta.ema(ta.ema(src, len), len), len)
+    else if type == "WMA"
+        ma := ta.wma(src, len)
+    else if type == "VWMA"
+        ma := ta.vwma(src, len)
+    else if type == "SMMA"
+        ma := ta.sma(src, len)
+    else if type == "HullMA"
+        ma := ta.wma(2 * ta.wma(src, len / 2) - ta.wma(src, len), math.round(math.sqrt(len)))
+    else if type == "LSMA"
+        ma := ta.linreg(src, len, offSig)
+    else if type == "ALMA"
+        ma := ta.alma(src, len, offALMA, offSig)
+    else if type == "TMA"
+        ma := ta.sma(ta.sma(src, len), len)
+    else
+        ma := ta.sma(src, len)
+    ma
+
+// Security wrapper (now with lookahead control)
+reso(exp, use, res) => use ? request.security(syminfo.tickerid, res, exp, lookahead=useLookahead ? barmerge.lookahead_on : barmerge.lookahead_off) : exp
+
+// === SERIES SETUP ===
+closeSeries = variant(basisType, close[delayOffset], basisLen, offsetSigma, offsetALMA)
+openSeries  = variant(basisType, open[delayOffset], basisLen, offsetSigma, offsetALMA)
+
+// Alternate resolution series.  Initialize with current close/open.
+var float closeSeriesAlt = close
+var float openSeriesAlt = open
+if useRes
+    closeSeriesAlt := reso(closeSeries, useRes, str.tostring(higherTimeframeMinutes))
+    openSeriesAlt  := reso(openSeries, useRes, str.tostring(higherTimeframeMinutes))
+
+// --- DEBUGGING PLOTS ---
+plot(useRes ? closeSeriesAlt : na, color=color.new(color.yellow, 50), title="closeSeriesAlt (Debug)", linewidth=2, display=display.none)
+plot(useRes ? openSeriesAlt : na, color=color.new(color.purple, 50), title="openSeriesAlt (Debug)", linewidth=2, display=display.none)
+plot(not useRes ? close : na, color=color.new(color.teal, 50), title="close (Debug)", linewidth=2, display=display.none)
+
+// --- Crossover/Crossunder Detection ---
+var bool crossedOver = false
+var bool crossedUnder = false
+crossedOver := ta.crossover(closeSeriesAlt, openSeriesAlt)
+crossedUnder := ta.crossunder(closeSeriesAlt, openSeriesAlt)
+
+// Trend Colors
+trendColour = closeSeriesAlt > openSeriesAlt ? color.green : color.red
+bcolour     = closeSeries > openSeriesAlt ? color.lime : color.red
+barcolor(scolor ? bcolour : na, title="Bar Colours")
+
+
+// === PLOTS WITH GRADIENT ===
+// Function to create gradient colors
+gradientColor(baseColor, brightness) =>
+    color gradient = na
+    if baseColor == color.green
+        gradient := color.from_gradient(brightness, 0, 100, color.rgb(0, 100, 0), color.rgb(0, 255, 0))  // Dark to Bright Green
+    else if baseColor == color.red
+        gradient := color.from_gradient(brightness, 0, 100, color.rgb(100, 0, 0), color.rgb(255, 0, 0))  // Dark to Bright Red
+    gradient
+
+// Calculate brightness (using the pre-calculated crossover/crossunder variables)
+brightness = ta.barssince(crossedOver or crossedUnder)
+brightness := math.min(brightness, 100) // Limit brightness to 100
+
+plot(closeSeriesAlt, title="Close Series Alt", color=gradientColor(trendColour, brightness), linewidth=2, style=plot.style_line, display = display.none)
+plot(openSeriesAlt, title="Open Series Alt", color=gradientColor(trendColour, brightness), linewidth=2, style=plot.style_line, display = display.none)
+//fill(closeP, openP, color=gradientColor(trendColour, brightness)) //Removed fill references
+
+
+// === ADX FILTER ===
+adxLength = input.int(14, title="ADX Length", minval=1)
+adxfilter = input.int(13, title="ADX filter", minval=1)
+plusDM = math.max(high - high[1], 0)
+minusDM = math.max(low[1] - low, 0)
+float plusDM_val = na
+plusDM_val := plusDM > minusDM ? plusDM : 0
+float minusDM_val = na
+minusDM_val := minusDM > plusDM ? minusDM : 0
+smoothedPlusDM = ta.rma(plusDM_val, adxLength)
+smoothedMinusDM = ta.rma(minusDM_val, adxLength)
+tr = ta.atr(adxLength)
+smoothedTR = ta.rma(tr, adxLength)
+plusDI = (smoothedPlusDM / smoothedTR) * 100
+minusDI = (smoothedMinusDM / smoothedTR) * 100
+dx = math.abs(plusDI - minusDI) / (plusDI + minusDI) * 100
+adx = ta.rma(dx, adxLength)
+
+// === TRADE CONDITIONS ===
+// --- Entry Conditions (depend on tradeType) ---
+longCond  = crossedOver and adx > adxfilter and tradeType != "SHORT"
+shortCond = crossedUnder and adx > adxfilter and tradeType != "LONG"
+
+// --- Exit Conditions (always based on opposing signal) ---
+//Exit only when crossedUnder AND ADX is above the filter
+exitLongCond = crossedUnder and adx > adxfilter // Exit long on crossunder
+exitShortCond = crossedOver and adx > adxfilter  // Exit short on crossover
+
+
+// === STRATEGY & 3Commas ALERTS ===
+slPoints  = input.float(0, title="Initial Stop Loss Points", minval=0)
+tpPoints  = input.float(0, title="Initial Target Profit Points", minval=0)
+ebar      = input.int(10000, title="Number of Bars for Back Testing", minval=0)
+
+tdays     = (timenow - time) / 60000.0
+
+float tdays_calc = na //Declare and initialize tdays
+tdays_calc := timeframe.ismonthly ? tdays / 1440.0 / 5.0 / 4.3 / timeframe.multiplier :
+             timeframe.isweekly ? tdays / 1440.0 / 5.0 / timeframe.multiplier :
+             timeframe.isdaily ? tdays / 1440.0 / timeframe.multiplier :
+             tdays / timeframe.multiplier
+
+TP = tpPoints > 0 ? tpPoints : na
+SL = slPoints > 0 ? slPoints : na
+
+// === DATE RANGE CHECK (Simplified) ===
+timeInRange = time >= fromTime and time <= toTime
+
+// === Visual Settings and Signal Labels ===
+visual_settings = "Visual Settings"  // Group name for inputs
+bullcolor = input.color(color.rgb(149, 255, 0), "Bullish Color", group=visual_settings)
+bearcolor = input.color(color.rgb(80, 11, 253), "Bearish Color", group=visual_settings)
+showsignals = input.bool(true, title="Show Signals", group=visual_settings)
+
+// --- Debugging Plots (Corrected Display) ---
+plotshape(useRes ? crossedOver : na, style=shape.triangleup, color=color.green, size=size.small, location=location.bottom, title="Crossed Over",  display = display.all)
+plotshape(useRes ? crossedUnder : na, style=shape.triangledown, color=color.red, size=size.small, location=location.top, title="Crossed Under",  display = display.all)
+plot(adx, color=color.blue, title="ADX", trackprice=false)
+hline(adxfilter, color=color.orange, title="ADX Filter", linestyle=hline.style_dotted)
+
+// --- Show Buy/Sell Signals (Always show based on conditions) ---
+//if showsignals
+//    if longCond
+//       // label.new(bar_index, high, "⬆BUY⬆", color=bullcolor, textcolor=color.black, style=label.style_label_down)
+//    if shortCond
+//      // label.new(bar_index, low, "⬇Sell⬇", color=bearcolor, textcolor=color.white, style=label.style_label_up)
+
+
+// === 3Commas ALERTS ===
+// REMOVED: strategy.risk.allow_entry_in(strategy.direction.long)
+
+//              ╔════════════════════════════════╗              //
+//              ║      SECRET BOT CONSTANTS      ║              //
+//              ╚════════════════════════════════╝              //
+
+// Define your secret and bot_uuid (these should be constants)
+string email_token = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" // from 3Commas  REPLACE THIS
+string bot_id = "xxxxxxxxxxx" // REPLACE WITH ACTUAL BOT UUID from 3Commas
+
+
+if (ebar == 0 or tdays_calc <= ebar) and timeInRange
+    //              ╔════════════════════════════════╗              //
+    //              ║             ALERTS             ║              //
+    //              ╚════════════════════════════════╝              //
+
+    // Construct the JSON message INSIDE timeInRange
+    string pair = syminfo.currency + "_" + syminfo.basecurrency // Declare AND initialize
+    var string long_message  = '{ "message_type": "bot", "bot_id": ' + bot_id + ', "email_token": "' + email_token + '", "delay_seconds": 0, "pair": "' + pair + '" }'
+    var string short_message = '{ "message_type": "bot", "bot_id": ' + bot_id + ', "email_token": "' + email_token + '", "delay_seconds": 0, "pair": "' + pair + '", "action": "close_at_market_price", "side": "short"}'
+
+    // --- Entries (Conditional on tradeType) ---
+    if (tradeType == "LONG" or tradeType == "BOTH") and longCond
+        strategy.entry("long", strategy.long, alert_message = long_message)
+
+    if (tradeType == "SHORT" or tradeType == "BOTH") and shortCond
+        strategy.entry("short", strategy.short, alert_message = short_message)
+
+
+    // --- Exits (Always based on opposing signal and ADX) ---
+    if exitLongCond
+        strategy.close("long", alert_message = short_message) // Close long, send 3Commas short message
+
+    if exitShortCond
+        strategy.close("short", alert_message = long_message) // Close short, send 3Commas long message.
+
+
+// === PERFORMANCE DASHBOARD ===
+    if showPerformance
+        // Format date range
+        fromDateStr = str.format("{0,date,long}", fromTime)
+        toDateStr   = str.format("{0,date,long}", toTime)
+
+        // Basic performance metrics (add more as needed)
+        netProfit = strategy.netprofit
+        winRate = strategy.wintrades / strategy.closedtrades * 100
+        maxDrawdown = strategy.max_drawdown
+
+        // Create the label text (one-line version)
+        labelText = "Performance Dashboard 📊\n------------------------\nDate Range: " + fromDateStr + " - " + toDateStr + "\nMA Type: " + basisType + "\nMA Period: " + str.tostring(basisLen) + "\nTime Warp: " + (useRes ? "Engaged (" + str.tostring(higherTimeframeMinutes) + ")" : "Disengaged") + "\n------------------------\nNet Profit: " + str.tostring(netProfit, "0.00") + "\nWin Rate: " + str.tostring(winRate, "0.00") + "%\nMax Drawdown: " + str.tostring(maxDrawdown, "0.00") + "%"
+
+        // Display the label on the chart (top right)
+        var label perfLabel = na
+        if na(perfLabel)
+            perfLabel := label.new(x=bar_index, y=high, text=labelText, color=color.navy, textcolor=color.white, style=label.style_label_down, size=size.small)
+            label.set_xloc(perfLabel, x=bar_index, xloc=xloc.bar_index) // Ensure it stays with the last bar
+        label.set_xy(perfLabel, x=bar_index, y=high)  //Update position on each bar.
+
+// === INSTRUCTION BOX ===
+    if showInstructions
+        instructionText = "ProfitWave™ Instructions:\n" +
+                          "-------------------------\n" +
+                          "1. Set Date Range.\n" +
+                          "2. Choose MA Type & Period.\n" +
+                          "3. Adjust Time Warp Factor.\n" +
+                          "4. Optional: Enable Trend Colors.\n" +
+                          "5. Set Trade Type (Long/Short/Both).\n" +
+                          "6. Optional: Enable Time Shift.\n" +
+                          "7. Optional: Enable ADX Filter.\n" +
+                          "-------------------------\n" +
+                          "Long Entry: Green Crossover + ADX Filter.\n" +  // Updated instructions
+                          "Short Entry: Red Crossunder + ADX Filter."      // Updated instructions
+
+        var label instrLabel = na
+        if na(instrLabel)
+            instrLabel := label.new(x=bar_index, y=low, text=instructionText, color=color.teal, textcolor=color.white, style=label.style_label_up, size=size.small)
+            label.set_xloc(instrLabel, x=bar_index, xloc=xloc.bar_index)
+        label.set_xy(instrLabel, x=bar_index, y=low)  //Update position on each bar.
+
+// === END ===
+
+// Seperate indicator for ADX, for its own pane
+//indicator("ProfitWave ADX", shorttitle = "ProfitWave ADX", overlay = false)
+//plot(adx, color=color.blue, title="ADX")
+//hline(adxfilter, color=color.orange, title="ADX Filter", linestyle=hline.style_dotted)
+
+// ADX Crossover/Crossunder Signals on ADX Pane
+//plotshape(ta.crossover(adx, adxfilter), style=shape.triangleup, color=color.green, size=size.small,  title="ADX Up")
+//plotshape(ta.crossunder(adx, adxfilter), style=shape.triangledown, color=color.red, size=size.small, title="ADX Down")
